@@ -218,9 +218,10 @@ def main_ProductionMultiphase(TVD, q_ProdFluid, CasingID, CasingOD, TubingID, Tu
     #Calculating the forced-convection heat transfer coefficient
     h_ProdFluid = Function__h_f(N_Nu_ProdFluid, k_ProdFluid, TubingID)
 
+    #For Natural Convection in the Annulus Where Stagnant Fluid is Present
     #Calculating Prandtl number for the annulus fluid
     N_Pr_AnnFluid = Function__N_Pr(Cp_AnnFluid, mu_AnnFluid, k_AnnFluid)
-    #For Natural Convection in the Annulus Where Stagnant Fluid is Present
+    #Calculating Grashof number for the annulus fluid
     Guess_DeltaT = 10.0
     N_Gr_AnnFluid = Function__N_Gr(CasingID, TubingOD, rho_AnnFluid, beta_Fluid, mu_AnnFluid, Guess_DeltaT)
     #Calculating annular convective heat transfer coefficient
@@ -501,4 +502,3 @@ else:
         
     else:
         st.markdown("<h1 style='text-align: center; color: red;'>This feature is coming soon.</h1>", unsafe_allow_html=True)
-
