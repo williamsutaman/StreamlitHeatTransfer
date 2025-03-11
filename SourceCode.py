@@ -250,7 +250,7 @@ def main_ProductionMultiphase(TVD, q_ProdFluid, CasingID, CasingOD, TubingID, Tu
     #Starting point from the bottomhole and keeping to move up to the surface
     CurrentDepth = TVD
     T_f_i = T_Bottomhole
-    GeothermalGradient = 0.02  # °F/ft
+    GeothermalGradient = 0.02  #°F/ft
     
     while CurrentDepth >= 0:
         for i in range(MaxIterations):
