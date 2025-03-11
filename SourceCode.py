@@ -122,7 +122,8 @@ def Function__U (r_to, r_ti, h_f, k_t, h_ann, r_ci, k_c, r_co, k_cem, r_w, k_e, 
     R_cond_e = f_t / k_e
     return 1 / r_to * (1 / (R_conv_f + R_cond_t + R_conv_ann + R_cond_c + R_cond_cem + R_cond_e))
 #Overall heat transfer rate (BTU/D)
-def Function__q (r, L, U, T_Fluid, T_Surrounding):
+def Function__q (r, L, U, T_Fluid, T_Surface, DepthNow, GeothermalGradient):
+    T_Surrounding = T_Surface + (GeothermalGradient * DepthNow)
     return 2 * math.pi * r * L * U * (T_Fluid - T_Surrounding)
 
 #Earth Thermal Resistance
@@ -138,9 +139,9 @@ def Function__t_Dw (k_e, t, rho_e, Cp_e, r_w):
 
 #Parameters to Compensate Kinetic Energy and Joule-Thompson Effect
 #Parameter of Fc
-def Function__Fc (P_wh, m_dot, GOR, SG_Oil, SG_Gas, T_Bottomhole, TVD):
+def Function__Fc (P_wh, m_dot, GOR, SG_Oil, SG_Gas, T_Bottomhole, T_Surface, TVD):
     API = (141.5 / SG_Oil) - 131.5
-    GeothermalGradient = T_Bottomhole / TVD
+    GeothermalGradient = (T_Bottomhole - T_Surface) / TVD
     return (-2.978e-3 + 1.006e-6 * P_wh + 1.906e-4 * (m_dot / 86400) - 1.047e-6 * GOR + 3.229e-5 * API + 4.009e-3 * SG_Gas - 0.3551 * GeothermalGradient)
 #Parameter of potential
 def Function__Potential (Cp):
@@ -163,7 +164,7 @@ def Function__m_dot (q, rho_fluid):
 def Function__rho_ProdFluid (GOR, SG_Oil, SG_Gas):
     WaterDensity = 62.4         # lb/ft³ at standard conditions
     AirDensity = 0.0765         # lb/ft³ at standard conditions
-    OilBarrelVolume = 5.615     # STB to standard ft³; Gas volume is assumed as 300 SCF in every STB of oil
+    OilBarrelVolume = 5.615     # STB to standard ft³; Gas volume is assumed as "GOR" SCF in every STB of oil
     OilMass = (SG_Oil * WaterDensity) * OilBarrelVolume     #Oil mass in lb unit
     GasMass = (SG_Gas * AirDensity) * GOR                   #Gas mass in lb unit
     ProdFluidDensity = (OilMass + GasMass) / (GOR + OilBarrelVolume)
@@ -248,6 +249,7 @@ def main_ProductionMultiphase(TVD, q_ProdFluid, CasingID, CasingOD, TubingID, Tu
     #Starting point from the bottomhole and keeping to move up to the surface
     CurrentDepth = TVD
     T_f_i = T_Bottomhole
+    GeothermalGradient = 0.02  # °F/ft
     
     while CurrentDepth >= 0:
         for i in range(MaxIterations):
@@ -259,16 +261,16 @@ def main_ProductionMultiphase(TVD, q_ProdFluid, CasingID, CasingOD, TubingID, Tu
             U = Function__U(TubingOD, TubingID, h_ProdFluid, k_Tubing, h_AnnFluid, CasingID, k_Casing, CasingOD, k_Cement, WellboreDiameter, k_Earth, f_t)
 
             #Calculating the overall heat transfer rate
-            q = Function__q(TubingOD, CurrentDepth, U, T_f_i, T_Surface)
+            q = Function__q(TubingOD, CurrentDepth, U, T_f_i, T_Surface, CurrentDepth, GeothermalGradient)
 
             #Calculating the mass flow rate
-            m_dot = Function__m_dot(q, rho_AnnFluid)
+            m_dot = Function__m_dot(q_ProdFluid, rho_AnnFluid)
 
             #Calculating the heat transfer rate through the annulus fluid
             Q_ann = Function__Q_ann(CasingID, CurrentDepth, h_AnnFluid, Guess_DeltaT)
 
             #For the Target of Tf_i+1
-            T_f_avg = Function__T_f_average(T_f_i, Q_ann, m_dot, Cp_ProdFluid, Function__Fc(P_Wellhead, m_dot, GOR, SG_Oil, SG_Gas, T_f_i, CurrentDepth), Function__Potential(Cp_ProdFluid), dL)
+            T_f_avg = Function__T_f_average(T_f_i, Q_ann, m_dot, Cp_ProdFluid, Function__Fc(P_Wellhead, m_dot, GOR, SG_Oil, SG_Gas, T_f_i, T_Surface, CurrentDepth), Function__Potential(Cp_ProdFluid), dL)
             T_f_next = (2 * T_f_avg) - T_f_i
 
             #The Recalculated Delta Temperature
@@ -290,8 +292,8 @@ def main_ProductionMultiphase(TVD, q_ProdFluid, CasingID, CasingOD, TubingID, Tu
         CurrentDepth -= dL
 
     #Showing the final results to the user
-    GeothermalGradient = (T_Bottomhole - T_Surface) / TVD
-    FormationTemperature = [T_Bottomhole - (GeothermalGradient * (TVD - depth)) for depth in Depths]
+    ActualGeothermalGradient = (T_Bottomhole - T_Surface) / TVD
+    FormationTemperature = [T_Bottomhole - (ActualGeothermalGradient * (TVD - depth)) for depth in Depths]
     #Table
     TableContent = {"Depth (ft)": Depths,
                     "Formation Temperature (°F)": FormationTemperature,
@@ -304,7 +306,7 @@ def main_ProductionMultiphase(TVD, q_ProdFluid, CasingID, CasingOD, TubingID, Tu
                    .format({"Depth (ft)": "{:.0f}",
                             "Formation Temperature (°F)": "{:.2f}",
                             "Fluid Temperature (°F)": "{:.2f}",
-                            "Overall Heat Transfer Coeff. (BTU/ft²-hr-°F)": "{:.3f}",
+                            "Overall Heat Transfer Coeff. (BTU/ft²-hr-°F)": "{:.6f}",
                             "Overall Heat Transfer Rate (BTU/hr)": "{:.3f}", })
                    .set_properties(**{'text-align': 'center'})
                    .set_table_styles([{'selector': 'th',
@@ -314,12 +316,9 @@ def main_ProductionMultiphase(TVD, q_ProdFluid, CasingID, CasingOD, TubingID, Tu
     st.dataframe(StyledTable, use_container_width = True)
     
     #Chart
-    ChartContent = {"Depth (ft)": Depths.copy(),
-                    "Fluid Temperature (°F)": Final_Tf_next.copy(),
-                    "Formation Temperature (°F)": FormationTemperature.copy(),}
-    ChartContent["Depth (ft)"].append(0)
-    ChartContent["Fluid Temperature (°F)"].append(T_Surface)
-    ChartContent["Formation Temperature (°F)"].append(T_Surface)
+    ChartContent = {"Depth (ft)": Depths,
+                    "Fluid Temperature (°F)": Final_Tf_next,
+                    "Formation Temperature (°F)": FormationTemperature,}
     ChartContent_DataFrame = pd.DataFrame(ChartContent)
     ChartModel = px.line(ChartContent_DataFrame, x = ["Fluid Temperature (°F)", "Formation Temperature (°F)"],
                          y = "Depth (ft)", title = "Temperature Profile Towards Depth",
@@ -502,7 +501,4 @@ else:
         
     else:
         st.markdown("<h1 style='text-align: center; color: red;'>This feature is coming soon.</h1>", unsafe_allow_html=True)
-
-
-
 
