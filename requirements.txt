@@ -1,0 +1,8 @@
+streamlit==1.43.0
+math
+matplotlib
+numpy
+pandas
+plotly
+streamlit
+Image
